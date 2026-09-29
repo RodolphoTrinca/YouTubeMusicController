@@ -20,10 +20,26 @@ public partial class App : System.Windows.Application
     private IHost? _host;
     private TrayIconService? _tray;
     private DebugLogWindowManager? _debugLogWindows;
+    private SingleInstanceCoordinator? _singleInstance;
+    private bool _pendingActivation;
 
     protected override async void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
+        _singleInstance = new SingleInstanceCoordinator();
+        if (!_singleInstance.IsPrimary)
+        {
+            await _singleInstance.SignalPrimaryAsync();
+            Shutdown();
+            return;
+        }
+        _singleInstance.Listen(() => Dispatcher.BeginInvoke(() =>
+        {
+            if (MainWindow is MainWindow window)
+                window.ShowFromTray();
+            else
+                _pendingActivation = true;
+        }));
         ConfigureSerilog(out var logStore);
 
         try
@@ -57,6 +73,8 @@ public partial class App : System.Windows.Application
             MainWindow = mainWindow;
             mainWindow.SettingsRequested += (_, _) => ShowSettings(mainWindow);
             mainWindow.Show();
+            if (_pendingActivation)
+                mainWindow.ShowFromTray();
 
             _tray = _host.Services.GetRequiredService<TrayIconService>();
             _tray.Initialize(
@@ -139,6 +157,7 @@ public partial class App : System.Windows.Application
 
     protected override async void OnExit(ExitEventArgs eventArgs)
     {
+        _singleInstance?.Dispose();
         _tray?.Dispose();
         _debugLogWindows?.Close();
         if (_host is not null)

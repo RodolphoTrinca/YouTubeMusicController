@@ -64,7 +64,7 @@
                            Text="Keyboard mode uses YouTube Music's own volume increment. Exact set-volume requests still use the Player API."/>
             </StackPanel>
         </Grid>
-        <CheckBox Grid.Row="5" x:Name="MinimizeToTrayBox" Content="Minimize to notification area"
+        <CheckBox Grid.Row="5" x:Name="MinimizeToTrayBox" Content="Close to notification area"
                   Margin="135,0,0,12"/>
         <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="135,0,0,12">
             <CheckBox x:Name="ShowDebugLogWindowBox" Content="Show debug log window"

@@ -30,11 +30,6 @@ public partial class MainWindow : Window
         _logger = logger;
         Loaded += OnLoaded;
         Closing += OnClosing;
-        StateChanged += (_, _) =>
-        {
-            if (WindowState == WindowState.Minimized && _settings.Current.MinimizeToTray)
-                Hide();
-        };
         _controller.StateChanged += OnPlayerStateChanged;
         _apiStatus.StatusChanged += OnApiStatusChanged;
         UpdateApiStatus();
