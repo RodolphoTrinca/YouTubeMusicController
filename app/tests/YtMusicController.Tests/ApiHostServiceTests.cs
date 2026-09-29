@@ -47,6 +47,91 @@ public sealed class ApiHostServiceTests
         }
     }
 
+    [Fact]
+    public async Task Socket_access_denied_selects_available_port_and_serves_requests()
+    {
+        var settings = new FakeSettings(54088);
+        using var logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.None));
+        var attempts = 0;
+        var notifications = 0;
+        var service = new ApiHostService(new FakeController(), settings, logs, logs.CreateLogger<ApiHostService>())
+        {
+            StartApplicationAsync = (application, token) =>
+                ++attempts == 1
+                    ? Task.FromException(new SocketException(10013))
+                    : application.StartAsync(token)
+        };
+        service.StatusChanged += (_, _) => notifications++;
+
+        try
+        {
+            await service.StartAsync(CancellationToken.None);
+            Assert.Equal(2, attempts);
+            Assert.Equal(1, notifications);
+            Assert.True(service.IsRunning);
+            Assert.True(service.UsedFallbackPort);
+            Assert.Null(service.ErrorMessage);
+            Assert.InRange(service.Port, 1, 65535);
+            Assert.Equal(service.Port, settings.Current.Port);
+            using var client = new HttpClient { BaseAddress = new Uri(service.BaseUrl!) };
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.GetApiToken());
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/player/status")).StatusCode);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Socket_failure_on_both_attempts_does_not_abort_application_startup()
+    {
+        var settings = new FakeSettings(54088);
+        using var logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.None));
+        var attempts = 0;
+        var notifications = 0;
+        var service = new ApiHostService(new FakeController(), settings, logs, logs.CreateLogger<ApiHostService>())
+        {
+            StartApplicationAsync = (_, _) =>
+            {
+                attempts++;
+                return Task.FromException(new SocketException(10013));
+            }
+        };
+        service.StatusChanged += (_, _) => notifications++;
+
+        await service.StartAsync(CancellationToken.None);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal(1, notifications);
+        Assert.False(service.IsRunning);
+        Assert.False(service.UsedFallbackPort);
+        Assert.Null(service.BaseUrl);
+        Assert.NotNull(service.ErrorMessage);
+        Assert.Equal(54088, settings.Current.Port);
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Cancellation_is_not_treated_as_a_port_failure()
+    {
+        var settings = new FakeSettings(54088);
+        using var logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.None));
+        var attempts = 0;
+        var service = new ApiHostService(new FakeController(), settings, logs, logs.CreateLogger<ApiHostService>())
+        {
+            StartApplicationAsync = (_, _) =>
+            {
+                attempts++;
+                return Task.FromCanceled(new CancellationToken(true));
+            }
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.StartAsync(CancellationToken.None));
+        Assert.Equal(1, attempts);
+        Assert.False(service.UsedFallbackPort);
+        await service.StopAsync(CancellationToken.None);
+    }
+
     private sealed class FakeSettings(int port) : IAppSettingsStore
     {
         public AppSettings Current { get; private set; } = new() { Port = port };

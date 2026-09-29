@@ -8,4 +8,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\YtMusicController.Core\YtMusicController.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="YtMusicController.Tests" />
+  </ItemGroup>
 </Project>
