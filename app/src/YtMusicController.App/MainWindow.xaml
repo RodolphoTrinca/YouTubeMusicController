@@ -4,7 +4,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="YouTube Music Controller" Height="780" Width="1200"
         MinHeight="520" MinWidth="800"
-        Background="#111111">
+        Background="#111111" Icon="/Assets/AppIcon.ico">
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="#202020" Padding="12,8">
             <Grid>

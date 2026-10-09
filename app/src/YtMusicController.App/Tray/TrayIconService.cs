@@ -6,6 +6,7 @@ namespace YtMusicController.App.Tray;
 public sealed class TrayIconService : IDisposable
 {
     private NotifyIcon? _icon;
+    private Icon? _appIcon;
 
     public void Initialize(Action show, Action settings, Action quit)
     {
@@ -15,9 +16,10 @@ public sealed class TrayIconService : IDisposable
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => quit());
 
+        _appIcon = Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath);
         _icon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _appIcon ?? SystemIcons.Application,
             Text = "YouTube Music Controller",
             ContextMenuStrip = menu,
             Visible = true
@@ -33,5 +35,7 @@ public sealed class TrayIconService : IDisposable
         _icon.ContextMenuStrip?.Dispose();
         _icon.Dispose();
         _icon = null;
+        _appIcon?.Dispose();
+        _appIcon = null;
     }
 }
