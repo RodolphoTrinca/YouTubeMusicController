@@ -20,10 +20,26 @@ public partial class App : System.Windows.Application
     private IHost? _host;
     private TrayIconService? _tray;
     private DebugLogWindowManager? _debugLogWindows;
+    private SingleInstanceCoordinator? _singleInstance;
+    private bool _pendingActivation;
 
     protected override async void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
+        _singleInstance = new SingleInstanceCoordinator();
+        if (!_singleInstance.IsPrimary)
+        {
+            await _singleInstance.SignalPrimaryAsync();
+            Shutdown();
+            return;
+        }
+        _singleInstance.Listen(() => Dispatcher.BeginInvoke(() =>
+        {
+            if (MainWindow is MainWindow window)
+                window.ShowFromTray();
+            else
+                _pendingActivation = true;
+        }));
         ConfigureSerilog(out var logStore);
 
         try
@@ -57,6 +73,8 @@ public partial class App : System.Windows.Application
             MainWindow = mainWindow;
             mainWindow.SettingsRequested += (_, _) => ShowSettings(mainWindow);
             mainWindow.Show();
+            if (_pendingActivation)
+                mainWindow.ShowFromTray();
 
             _tray = _host.Services.GetRequiredService<TrayIconService>();
             _tray.Initialize(
@@ -137,28 +155,37 @@ public partial class App : System.Windows.Application
         settingsWindow.ShowDialog();
     }
 
-    protected override async void OnExit(ExitEventArgs eventArgs)
+    protected override void OnExit(ExitEventArgs eventArgs)
     {
-        _tray?.Dispose();
-        _debugLogWindows?.Close();
-        if (_host is not null)
+        try
         {
-            try
+            _tray?.Dispose();
+            _debugLogWindows?.Close();
+            if (_host is not null)
             {
-                await _host.StopAsync(TimeSpan.FromSeconds(5));
+                try
+                {
+                    // Finish releasing the API port before another instance can start.
+                    Task.Run(() => _host.StopAsync(TimeSpan.FromSeconds(5)))
+                        .GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Application host shutdown failed");
+                }
+                finally
+                {
+                    _host.Dispose();
+                }
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Application host shutdown failed");
-            }
-            finally
-            {
-                _host.Dispose();
-            }
-        }
 
-        Log.Information("YtMusicController stopped");
-        Log.CloseAndFlush();
-        base.OnExit(eventArgs);
+            Log.Information("YtMusicController stopped");
+        }
+        finally
+        {
+            _singleInstance?.Dispose();
+            Log.CloseAndFlush();
+            base.OnExit(eventArgs);
+        }
     }
 }

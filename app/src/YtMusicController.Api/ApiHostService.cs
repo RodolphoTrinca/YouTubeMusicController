@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -21,6 +22,9 @@ public sealed class ApiHostService(
 {
     private WebApplication? _application;
 
+    internal Func<WebApplication, CancellationToken, Task> StartApplicationAsync { get; init; } =
+        (application, cancellationToken) => application.StartAsync(cancellationToken);
+
     public bool IsRunning { get; private set; }
     public int Port { get; private set; }
     public string? BaseUrl => IsRunning ? $"http://127.0.0.1:{Port}" : null;
@@ -30,12 +34,14 @@ public sealed class ApiHostService(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        UsedFallbackPort = false;
+        ErrorMessage = null;
         var preferredPort = settings.Current.Port;
         try
         {
             await StartServerAsync(preferredPort, cancellationToken);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or SocketException)
         {
             logger.LogWarning(ex,
                 "Preferred local API port {Port} is unavailable; requesting an available loopback port",
@@ -46,11 +52,11 @@ public sealed class ApiHostService(
             {
                 await StartServerAsync(0, cancellationToken);
             }
-            catch (IOException fallbackException)
+            catch (Exception fallbackException) when (fallbackException is IOException or SocketException)
             {
                 await DisposeFailedApplicationAsync();
                 IsRunning = false;
-                ErrorMessage = "The local API could not acquire an available loopback port.";
+                ErrorMessage = "Companion controls are unavailable because Windows could not open a local connection. You can continue using the music player.";
                 logger.LogError(fallbackException, "Local API could not bind to an available loopback port");
                 return;
             }
@@ -94,7 +100,7 @@ public sealed class ApiHostService(
         builder.Services.AddSingleton(settings);
 
         _application = ApiApplication.Configure(builder.Build());
-        await _application.StartAsync(cancellationToken);
+        await StartApplicationAsync(_application, cancellationToken);
 
         Port = GetBoundPort(_application, requestedPort);
         IsRunning = true;
