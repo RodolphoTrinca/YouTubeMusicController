@@ -155,29 +155,37 @@ public partial class App : System.Windows.Application
         settingsWindow.ShowDialog();
     }
 
-    protected override async void OnExit(ExitEventArgs eventArgs)
+    protected override void OnExit(ExitEventArgs eventArgs)
     {
-        _singleInstance?.Dispose();
-        _tray?.Dispose();
-        _debugLogWindows?.Close();
-        if (_host is not null)
+        try
         {
-            try
+            _tray?.Dispose();
+            _debugLogWindows?.Close();
+            if (_host is not null)
             {
-                await _host.StopAsync(TimeSpan.FromSeconds(5));
+                try
+                {
+                    // Finish releasing the API port before another instance can start.
+                    Task.Run(() => _host.StopAsync(TimeSpan.FromSeconds(5)))
+                        .GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Application host shutdown failed");
+                }
+                finally
+                {
+                    _host.Dispose();
+                }
             }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Application host shutdown failed");
-            }
-            finally
-            {
-                _host.Dispose();
-            }
-        }
 
-        Log.Information("YtMusicController stopped");
-        Log.CloseAndFlush();
-        base.OnExit(eventArgs);
+            Log.Information("YtMusicController stopped");
+        }
+        finally
+        {
+            _singleInstance?.Dispose();
+            Log.CloseAndFlush();
+            base.OnExit(eventArgs);
+        }
     }
 }

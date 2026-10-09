@@ -16,18 +16,26 @@ internal static class PlayerScripts
 
   const findMedia = () => document.querySelector('video, audio');
   const findPlayer = () => document.querySelector('#movie_player');
+  const isVisible = element => {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' &&
+      element.getClientRects().length > 0;
+  };
   const findLikeRenderer = () => {
-    const playerBar = document.querySelector(
-      'ytmusic-player-bar #like-button-renderer, ytmusic-player-bar ytmusic-like-button-renderer');
+    const playerBar = Array.from(document.querySelectorAll(
+      'ytmusic-player-bar #like-button-renderer, ytmusic-player-bar ytmusic-like-button-renderer'))
+      .find(isVisible);
     if (playerBar) return playerBar;
     const playerPage = document.querySelector('ytmusic-player-page');
     const candidates = Array.from(playerPage?.querySelectorAll('ytmusic-like-button-renderer') || [])
       .filter(element => !element.closest('ytmusic-player-queue, ytmusic-player-queue-item') &&
-        element.getClientRects().length > 0);
+        isVisible(element));
     return candidates.length === 1 ? candidates[0] : null;
   };
   const readModernLike = () => {
-    const button = document.querySelector('ytmusic-miniplayer like-button-view-model button');
+    const buttons = Array.from(document.querySelectorAll('ytmusic-miniplayer like-button-view-model button'))
+      .filter(isVisible);
+    const button = buttons.length === 1 ? buttons[0] : null;
     if (!button) return null;
     const pressed = button.getAttribute('aria-pressed') ??
       button.closest('toggle-button-view-model')?.getAttribute('aria-pressed');
@@ -41,8 +49,7 @@ internal static class PlayerScripts
     const candidates = Array.from(document.querySelectorAll('button[aria-label]'))
       .filter(element => /^(like|unlike|remove like)$/i.test(element.getAttribute('aria-label') || '') &&
         !element.closest('ytmusic-player-queue, ytmusic-player-queue-item, ytmusic-browse-response') &&
-        element.getClientRects().length > 0 &&
-        window.getComputedStyle(element).visibility !== 'hidden');
+        isVisible(element));
     return candidates.length === 1 ? candidates[0] : null;
   };
   const readLiked = () => {
@@ -325,23 +332,27 @@ internal static class PlayerScripts
         return $$"""
 (() => {
   if (location.origin !== 'https://music.youtube.com') return { ok: false, error: 'untrusted-origin' };
-  const playerBarRenderer = document.querySelector(
-    'ytmusic-player-bar #like-button-renderer, ytmusic-player-bar ytmusic-like-button-renderer');
+  const isVisible = element => {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' &&
+      element.getClientRects().length > 0;
+  };
+  const playerBarRenderer = Array.from(document.querySelectorAll(
+    'ytmusic-player-bar #like-button-renderer, ytmusic-player-bar ytmusic-like-button-renderer'))
+    .find(isVisible);
   const playerPageRenderers = Array.from(document.querySelectorAll(
     'ytmusic-player-page ytmusic-like-button-renderer'))
     .filter(element => !element.closest('ytmusic-player-queue, ytmusic-player-queue-item') &&
-      element.getClientRects().length > 0);
+      isVisible(element));
   const renderer = playerBarRenderer ||
     (playerPageRenderers.length === 1 ? playerPageRenderers[0] : null);
   const modernLikeButtons = Array.from(document.querySelectorAll(
     'ytmusic-miniplayer like-button-view-model button'))
-    .filter(element => element.getClientRects().length > 0 &&
-      window.getComputedStyle(element).visibility !== 'hidden');
+    .filter(isVisible);
   const visibleLikeButtons = Array.from(document.querySelectorAll('button[aria-label]'))
     .filter(element => /^(like|unlike|remove like)$/i.test(element.getAttribute('aria-label') || '') &&
       !element.closest('ytmusic-player-queue, ytmusic-player-queue-item, ytmusic-browse-response') &&
-      element.getClientRects().length > 0 &&
-      window.getComputedStyle(element).visibility !== 'hidden');
+      isVisible(element));
   const selectors = [
     'ytmusic-player-bar #like-button-renderer #button-shape-like button',
     'ytmusic-player-bar #like-button-renderer yt-button-shape.like button',
@@ -390,16 +401,12 @@ internal static class PlayerScripts
   if (desired !== null && current === desired) {
     return { ok: true, mechanism: 'already-in-state', control: {{serializedControlName}}, detail: String(current) };
   }
-  const candidates = selectors
-    .map(selector => ({ selector, element: document.querySelector(selector) }))
-    .filter(candidate => !!candidate.element);
-  const match = candidates.find(candidate => {
-    const style = window.getComputedStyle(candidate.element);
-    return style.display !== 'none' && style.visibility !== 'hidden' &&
-      candidate.element.getClientRects().length > 0;
-  }) ?? candidates[0] ?? (renderer ? (() => {
+  const candidates = selectors.flatMap(selector => Array.from(
+    document.querySelectorAll(selector), element => ({ selector, element })));
+  const match = candidates.find(candidate => isVisible(candidate.element)) ?? (renderer ? (() => {
     const button = Array.from(renderer.querySelectorAll('yt-button-shape button[aria-label]'))
-      .find(element => /^(like|unlike|remove like)$/i.test(element.getAttribute('aria-label') || ''));
+      .find(element => isVisible(element) &&
+        /^(like|unlike|remove like)$/i.test(element.getAttribute('aria-label') || ''));
     return button ? { selector: 'current-player-like-button', element: button } : null;
   })() : null) ?? (modernLikeButtons.length === 1
     ? { selector: 'current-player-modern-like-button', element: modernLikeButtons[0] } : null)
